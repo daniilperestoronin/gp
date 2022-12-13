@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"time"
 
 	"github.com/gen2brain/beeep"
@@ -50,28 +51,8 @@ func (p *Pomo) Start() {
 
 	go func() {
 		for p.countDone < p.Count+1 {
-			err := beeep.Beep(beeep.DefaultFreq, beeep.DefaultDuration)
-			if err != nil {
-				panic(err)
-			}
-
-			err = beeep.Notify("Go Pomo", "Start work", "")
-			if err != nil {
-				panic(err)
-			}
-
-			p.startTimer(p.Work, cell.ColorRed, clockSD)
-
-			err = beeep.Beep(beeep.DefaultFreq, beeep.DefaultDuration)
-			if err != nil {
-				panic(err)
-			}
-
-			err = beeep.Notify("Go Pomo", "Start rest", "")
-			if err != nil {
-				panic(err)
-			}
-			p.startTimer(p.Break, cell.ColorGreen, clockSD)
+			p.startTimer(p.Work, cell.ColorRed, clockSD, "Start work")
+			p.startTimer(p.Break, cell.ColorGreen, clockSD, "Start rest")
 
 			p.countDone++
 		}
@@ -80,7 +61,8 @@ func (p *Pomo) Start() {
 	c, err := container.New(
 		t,
 		container.Border(linestyle.Light),
-		container.BorderTitle("PRESS Q TO QUIT"),
+		container.BorderTitle(fmt.Sprintf("  Work on: '%s', to stop press Q  ", p.Tag)),
+
 		container.PlaceWidget(clockSD),
 	)
 	if err != nil {
@@ -99,9 +81,12 @@ func (p *Pomo) Start() {
 
 }
 
-func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.SegmentDisplay) {
+func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.SegmentDisplay, mes string) {
 	startTime := time.Now()
 	endTime := startTime.Add(w)
+
+	notify(fmt.Sprintf("%s, tag: '%s', round:%d/%d, end time: %s",
+		mes, p.Tag, p.countDone, p.Count, endTime.Format("15:04:05")))
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -127,11 +112,23 @@ func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.
 	}
 }
 
+func notify(message string) {
+	err := beeep.Beep(beeep.DefaultFreq, beeep.DefaultDuration)
+	if err != nil {
+		panic(err)
+	}
+
+	err = beeep.Alert("Go Pomo", message, "")
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
 	wd := flag.String("w", "25m", "Work time duration")
-	bd := flag.String("b", "25m", "Break time duration")
+	bd := flag.String("b", "5m", "Break time duration")
 	c := flag.Int("c", 5, "Count of rounds")
-	t := flag.String("t", "Work", "Tag")
+	t := flag.String("t", "Ordinary task", "Tag")
 
 	w, _ := time.ParseDuration(*wd)
 	b, _ := time.ParseDuration(*bd)

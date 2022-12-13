@@ -1,4 +1,4 @@
-module github.com/daniilperestoronin/gp
+module github.com/daniilperestoronin/gpom
 
 go 1.18
 
