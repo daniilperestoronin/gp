@@ -1,8 +1,8 @@
-# Go Pomodoro
-
 <div align="center">
-  <img alt="gpom" src="./docs/gpom.png" width="800px">
+  <img alt="gpom" src="./docs/gpom.jpg" width="800px">
 </div>
+
+# Go Pomodoro
 
 Extremely simple and reliable cli pomodoro timer with notifications written in go.
 
