@@ -1,8 +1,16 @@
-# Go Pomodoro timer
+# Go Pomodoro
 
-cli pomodoro timer
+![alt text](/docs/gpom.png)
 
-For start:
+Extremely simple and reliable cli pomodoro timer with notifications written on go.
+
+### How to:
 ```sh
-gpom -w=25m -b=5m -c=5 -t=Work
+# get it
+git clone https://github.com/daniilperestoronin/gpom.git
+# build it
+cd gpom
+make build
+# use it 
+./gpom
 ```
