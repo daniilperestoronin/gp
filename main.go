@@ -4,9 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"time"
 
 	"github.com/gen2brain/beeep"
+	"github.com/getlantern/systray"
 	"github.com/mum4k/termdash"
 	"github.com/mum4k/termdash/cell"
 	"github.com/mum4k/termdash/container"
@@ -16,23 +18,34 @@ import (
 	"github.com/mum4k/termdash/widgets/segmentdisplay"
 )
 
+type TimerType int
+
+const (
+	Work TimerType = iota
+	Break
+)
+
 type Pomo struct {
-	Count     int
-	countDone int
-	Tag       string
-	Work      time.Duration
-	Break     time.Duration
-	ctx       context.Context
-	cancel    context.CancelFunc
+	Round        int
+	currentRound int
+	Tag          string
+	Work         time.Duration
+	Break        time.Duration
+	ctx          context.Context
+	cancel       context.CancelFunc
+	timer        chan string
+	timerType    chan TimerType
 }
 
-func CreatePomo(c int, t string, w, b time.Duration) Pomo {
+func CreatePomo(r int, t string, w, b time.Duration) Pomo {
 	return Pomo{
-		Count:     c,
-		countDone: 1,
-		Tag:       t,
-		Work:      w,
-		Break:     b,
+		Round:        r,
+		currentRound: 1,
+		Tag:          t,
+		Work:         w,
+		Break:        b,
+		timer:        make(chan string),
+		timerType:    make(chan TimerType),
 	}
 }
 
@@ -49,12 +62,13 @@ func (p *Pomo) Start() {
 		panic(err)
 	}
 
+	go systray.Run(p.onReady, p.onExit)
 	go func() {
-		for p.countDone < p.Count+1 {
-			p.startTimer(p.Work, cell.ColorRed, clockSD, "Start work")
-			p.startTimer(p.Break, cell.ColorGreen, clockSD, "Start rest")
+		for p.currentRound < p.Round+1 {
+			p.startTimer(p.Work, cell.ColorRed, clockSD, Work)
+			p.startTimer(p.Break, cell.ColorGreen, clockSD, Break)
 
-			p.countDone++
+			p.currentRound++
 		}
 	}()
 
@@ -81,12 +95,21 @@ func (p *Pomo) Start() {
 
 }
 
-func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.SegmentDisplay, mes string) {
+func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.SegmentDisplay, tt TimerType) {
+	p.timerType <- tt
+
 	startTime := time.Now()
 	endTime := startTime.Add(w)
 
+	var mes string
+	if tt == Work {
+		mes = "Start work"
+	} else {
+		mes = "Start break"
+	}
+
 	notify(fmt.Sprintf("%s, tag: '%s', round:%d/%d, end time: %s",
-		mes, p.Tag, p.countDone, p.Count, endTime.Format("15:04:05")))
+		mes, p.Tag, p.currentRound, p.Round, endTime.Format("15:04:05")))
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -102,8 +125,10 @@ func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.
 		case <-done:
 			return
 		case t := <-ticker.C:
+			ct := endTime.Sub(t).Round(time.Second).String()
+			p.timer <- ct
 			chunks := []*segmentdisplay.TextChunk{
-				segmentdisplay.NewChunk(endTime.Sub(t).Round(time.Second).String(), segmentdisplay.WriteCellOpts(cell.FgColor(color))),
+				segmentdisplay.NewChunk(ct, segmentdisplay.WriteCellOpts(cell.FgColor(color))),
 			}
 			if err := sd.Write(chunks); err != nil {
 				panic(err)
@@ -118,7 +143,7 @@ func notify(message string) {
 		panic(err)
 	}
 
-	err = beeep.Alert("Go Pomo", message, "")
+	err = beeep.Alert("GPom", message, "")
 	if err != nil {
 		panic(err)
 	}
@@ -127,13 +152,54 @@ func notify(message string) {
 func main() {
 	wd := flag.String("w", "25m", "Work time duration")
 	bd := flag.String("b", "5m", "Break time duration")
-	c := flag.Int("c", 5, "Count of rounds")
+	r := flag.Int("r", 5, "Count of rounds")
 	t := flag.String("t", "Ordinary task", "Tag")
 
 	w, _ := time.ParseDuration(*wd)
 	b, _ := time.ParseDuration(*bd)
 
-	pomo := CreatePomo(*c, *t, w, b)
+	pomo := CreatePomo(*r, *t, w, b)
 
 	pomo.Start()
+}
+
+func (p *Pomo) onReady() {
+	gpomIcon, err := ioutil.ReadFile("assets/gpom.ico")
+	if err != nil {
+		panic(err)
+	}
+	gpomWorkIcon, err := ioutil.ReadFile("assets/gpom-work.ico")
+	if err != nil {
+		panic(err)
+	}
+	gpomBreakIcon, err := ioutil.ReadFile("assets/gpom-break.ico")
+	if err != nil {
+		panic(err)
+	}
+	systray.SetIcon(gpomIcon)
+	systray.SetTitle("GPom")
+	go func() {
+		for {
+			select {
+			case t := <-p.timer:
+				systray.SetTitle(t)
+			case tt := <-p.timerType:
+				if tt == Work {
+					fmt.Println("Work")
+					systray.SetIcon(gpomWorkIcon)
+				} else {
+					systray.SetIcon(gpomBreakIcon)
+				}
+			}
+		}
+	}()
+
+	systray.AddMenuItem("Pause", "")
+	systray.AddMenuItem("Stop", "")
+	systray.AddMenuItem("Statistics", "")
+	systray.AddMenuItem("Settings", "")
+	systray.AddMenuItem("Quit", "")
+}
+
+func (p *Pomo) onExit() {
 }
