@@ -92,7 +92,6 @@ func (p *Pomo) Start() {
 	if err := termdash.Run(p.ctx, t, c, termdash.KeyboardSubscriber(quitter), termdash.RedrawInterval(1*time.Second)); err != nil {
 		panic(err)
 	}
-
 }
 
 func (p *Pomo) startTimer(w time.Duration, color cell.Color, sd *segmentdisplay.SegmentDisplay, tt TimerType) {
